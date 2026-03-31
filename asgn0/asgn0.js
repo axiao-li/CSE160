@@ -125,9 +125,14 @@ function handleDrawOperationEvent() {
         v4.normalize();
         drawVector(v3, "green");
         drawVector(v4, "green");
-    } else if (op === "angleBetween") {
+    // 7
+    } else if (op === "angle") {
         var alpha = angleBetween(v1, v2);
         console.log("Angle: " + Math.round(alpha));
+    // 8
+    } else if (op === "area") {
+        var area = areaTriangle(v1, v2);
+        console.log("Area of the triangle: " + area);
     }
 }
 
@@ -142,4 +147,12 @@ function angleBetween(v1, v2) {
     var alphaDeg = alphaRad * (180 / Math.PI);
 
     return alphaDeg;
+}
+
+// 8
+function areaTriangle(v1, v2) {
+    var crossProduct = Vector3.cross(v1, v2);
+    var areaParallelogram = crossProduct.magnitude();
+    var areaTriangle = areaParallelogram / 2;
+    return areaTriangle;
 }
