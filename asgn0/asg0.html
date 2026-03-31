@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Draw a blue rectangle (canvas version)</title>
+    </head>
+
+    <body onload="main()">
+        <canvas id="example" width="400" height="400">
+            Please use a browser that supports "canvas"
+        </canvas>
+        <script src="asg0.js"></script>
+
+        <!--Draw a Vector-->
+        <br>
+        <label>v1: </label>
+        <label for="x1">x</label>
+        <input type="number" id="x1" step="1" value="0" />
+        <label for="y1">y</label>
+        <input type="number" id="y1" step="1" value="0" />
+        <br>
+        <label>v2: </label>
+        <label for="x2">x</label>
+        <input type="number" id="x2" step="1" value="0" />
+        <label for="y2">y</label>
+        <input type="number" id="y2" step="1" value="0" />
+        <br>
+        <button id="drawButton">Draw</button>
+
+        <!--Do Vector Operations-->
+        <br>
+        <br>
+        <label>Operation: </label>
+        <select id="operation">
+            <option value="add">Add</option>
+            <option value="sub">Subtract</option>
+            <option value="mul">Multiply</option>
+            <option value="div">Divide</option>
+        </select>
+        <label for="scalarInput">Scalar: </label>
+        <input type="number" id="scalarInput" step="1" />
+        <br>
+        <button id="drawOperationButton">Draw</button>
+
+        <!-- Load libraries-->
+        <script src="lib/cuon-matrix-cse160.js"></script>
+    </body>
+</html>
