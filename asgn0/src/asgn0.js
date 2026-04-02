@@ -1,3 +1,8 @@
+/*
+Name: Alice Xiao-Li
+Email: axiaoli@ucsc.edu
+*/
+
 function main() {
     // 1
     // Retrieve <canvas> element
