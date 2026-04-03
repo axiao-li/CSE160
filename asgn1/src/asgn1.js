@@ -1,7 +1,9 @@
 /*
 Name: Alice Xiao-Li
 Email: axiaoli@ucsc.edu
-Note: Used LLM as a coding/learning assistant
+Note: Used LLM as a coding assistant
+
+Awesome features: symmetry mode, rainbow mode, and disappearing mode
 */
 
 // Vertex shader program
@@ -85,23 +87,37 @@ let g_selectedType = POINT;
 let g_selectedSegments = 10;
 let symmetryActive = false;
 let symmetryLines = 2;
+let rainbowMode = false;
+let rainbowColors = [
+    [1.0, 0.0, 0.0, 1.0],       // red
+    [1.0, 0.5, 0.0, 1.0],       // orange
+    [1.0, 1.0, 0.0, 1.0],       // yellow
+    [0.0, 1.0, 0.0, 1.0],       // green
+    [0.0, 0.0, 1.0, 1.0],       // blue
+    [0.56, 0.0, 1.0, 1.0]       // violet
+];
+let rainbowIndex = 0;
+let disappearingMode = false;
+const disappearDuration = 2000;
 
 // Set up actions for the HTML UI elements
 function addActionsForHtmlUI() {
 
     // Button Events
-    document.getElementById('green').onclick = function() { g_selectedColor = [0.0, 1.0, 0.0, 1.0]; };
-    document.getElementById('red').onclick = function() { g_selectedColor = [1.0, 0.0, 0.0, 1.0]; };
+    document.getElementById('green').onclick = function() { g_selectedColor = [0.0, 1.0, 0.0, 1.0]; rainbowMode = false; };
+    document.getElementById('red').onclick = function() { g_selectedColor = [1.0, 0.0, 0.0, 1.0]; rainbowMode = false; };
+    document.getElementById('blue').onclick = function() { g_selectedColor = [0.0, 0.0, 1.0, 1.0]; rainbowMode = false; };
     document.getElementById('clearButton').onclick = function() { g_shapesList = []; gl.clearColor(0.0, 0.0, 0.0, 1.0); renderAllShapes(); };
+    document.getElementById('rainbowButton').onclick = function() { rainbowMode = true; };
 
     document.getElementById('pointButton').onclick = function() { g_selectedType=POINT; };
     document.getElementById('triButton').onclick = function() { g_selectedType=TRIANGLE; };
     document.getElementById('circleButton').onclick = function() { g_selectedType=CIRCLE; };
 
     // Slider Events
-    document.getElementById('redSlide').addEventListener('mouseup', function() { g_selectedColor[0] = this.value / 100; });
-    document.getElementById('greenSlide').addEventListener('mouseup', function() { g_selectedColor[1] = this.value / 100; });
-    document.getElementById('blueSlide').addEventListener('mouseup', function() { g_selectedColor[2] = this.value / 100; });
+    document.getElementById('redSlide').addEventListener('mouseup', function() { g_selectedColor[0] = this.value / 100; rainbowMode = false; });
+    document.getElementById('greenSlide').addEventListener('mouseup', function() { g_selectedColor[1] = this.value / 100; rainbowMode = false; });
+    document.getElementById('blueSlide').addEventListener('mouseup', function() { g_selectedColor[2] = this.value / 100; rainbowMode = false; });
 
     // Size Slider Events
     document.getElementById('sizeSlide').addEventListener('mouseup', function() { g_selectedSize = this.value; });
@@ -112,10 +128,12 @@ function addActionsForHtmlUI() {
     // Picture Events
     document.getElementById('picButton').onclick = function() { drawPicture(); };
 
-    // Symmetry Pen Events
-    document.getElementById('symmetryButton').onclick = function() { symmetryActive = !symmetryActive; this.textContent = symmetryActive ? "Symmetry Pen ON" : "Symmetry Pen OFF"; };
+    // Symmetry Mode Events
+    document.getElementById('symmetryButton').onclick = function() { symmetryActive = !symmetryActive; this.textContent = symmetryActive ? "Symmetry Mode ON" : "Symmetry Mode OFF"; };
     document.getElementById('symmetrySlider').addEventListener('input', function() { symmetryLines = parseInt(this.value); document.getElementById('symmetryValue').textContent = symmetryLines; });
 
+    // Disappearing Mode Events
+    document.getElementById('disappearButton').onclick = function() { disappearingMode = !disappearingMode; this.textContent = disappearingMode ? "Disappear Mode ON" : "Disappear Mode OFF"; };
 }
 
 function main() {
@@ -137,6 +155,14 @@ function main() {
 
     // Clear <canvas>
     gl.clear(gl.COLOR_BUFFER_BIT);
+
+    function animate() {
+        renderAllShapes();                  // redraw everything 
+        requestAnimationFrame(animate);     // schedule the next frame
+    }
+
+    // start animation loop
+    animate();
 }
 
 var g_shapesList = []; // The array for the shapes that are drawn
@@ -156,10 +182,6 @@ function click(ev) {
         point = new Circle();
         point.segments = g_selectedSegments;
     }
-    // point.position=[x,y];
-    // point.color=g_selectedColor.slice();
-    // point.size=g_selectedSize;
-    // g_shapesList.push(point);
     let pointsToDraw = [{x, y}];
 
     if (symmetryActive) {
@@ -186,13 +208,20 @@ function click(ev) {
             point.segments = g_selectedSegments;
         }
         point.position=[pt.x, pt.y];
-        point.color=g_selectedColor.slice();
+        if (rainbowMode) {
+            point.color = rainbowColors[rainbowIndex % rainbowColors.length];
+        } else {
+            point.color = g_selectedColor.slice();
+        }
         point.size=g_selectedSize;
+        point.createdAt = performance.now();
+        point.lifetime = disappearingMode ? disappearDuration : Infinity;
         g_shapesList.push(point);
     }
+    if (rainbowMode) rainbowIndex++;
 
     // Draw every shape that is supposed to be in the canvas
-    renderAllShapes();
+    //renderAllShapes();
 
 }
 
@@ -212,13 +241,17 @@ function convertCoordinatesEventToWebGL(ev) {
 // Draw every shape that is supposed to be in the canvas
 function renderAllShapes() {
 
-    // Clear <canvas>
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // Draw each shape in the list
-    var len = g_shapesList.length;
-    for(var i = 0; i < len; i++) {
-        g_shapesList[i].render();
+    const now = performance.now();
+
+    // Keep shapes that haven't expired
+    g_shapesList = g_shapesList.filter(shape => {
+        return now - shape.createdAt < shape.lifetime;
+    });
+
+    for (let shape of g_shapesList) {
+        shape.render();
     }
     
 }

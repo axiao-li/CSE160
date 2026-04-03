@@ -10,6 +10,8 @@ class Circle {
         this.color = [1.0, 1.0, 1.0, 1.0];
         this.size = 5.0;
         this.segments = 10;
+        this.lifetime = disappearingMode ? disappearDuration : Infinity;
+        this.createdAt = performance.now();
     }
 
     render() {
