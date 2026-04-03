@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Assignment 1</title>
+  </head>
+
+  <body onload="main()">
+    <canvas id="webgl" width="400" height="400">
+    Please use a browser that supports "canvas"
+    </canvas>
+    <img src="my-melody-triangle-drawing.jpg" width="400" height="400">
+    <br>
+
+    <button type="button" id="clearButton">Clear Canvas</button>
+    <p>
+    
+    <li><b>Drawing Mode:</b></li>
+    <button type="button" id="pointButton">Point</button>
+    <button type="button" id="triButton">Triangle</button>
+    <button type="button" id="circleButton">Circle</button>
+    <button type="button" id="picButton" style="color: rgb(209, 92, 159)">💗Picture💗</button>
+
+    <p>
+    <li><b>Color:</b></li>
+    <button type="button" id="green" style="color: green">Green</button>
+    <button type="button" id="red" style="color: red">Red</button>
+
+    <p>
+    <li><b>Custom Color:</b></li>
+    <span style="color:red">Red</span> <input type="range" min="0" max="100" value="100" class="slider" id="redSlide">
+    <span style="color:green">Green</span> <input type="range" min="0" max="100" value="0" class="slider" id="greenSlide">
+    <span style="color:blue">Blue</span> <input type="range" min="0" max="100" value="0" class="slider" id="blueSlide">
+
+    <p>
+    <li><b>Circle Settings:</b></li>
+    Size: <input type="range" min="5" max="40" value="0" class="slider" id="sizeSlide">
+    (Circles) Segment Count: <input type="range" min="5" max="30" value="10" class="slider" id="segmentsSlide">
+    <p>
+    <span style="color:rgb(162, 0, 255)"><b>⭐Awesome Symmetry Pen⭐:</b></span>
+    <br>
+    <button id="symmetryButton">Symmetry Pen OFF</button>
+    <label>Lines of Symmetry: </label><input type="range" id="symmetrySlider" min="2" max="10" value="2">
+    <span id="symmetryValue">2</span>
+
+    <script src="../lib/webgl-utils.js"></script>
+    <script src="../lib/webgl-debug.js"></script>
+    <script src="../lib/cuon-utils.js"></script>
+    <script src="Point.js"></script>
+    <script src="Triangle.js"></script>
+    <script src="Circle.js"></script>
+    <script src="asgn1.js"></script>
+  </body>
+</html>
