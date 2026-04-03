@@ -3,7 +3,7 @@ Name: Alice Xiao-Li
 Email: axiaoli@ucsc.edu
 Note: Used LLM as a coding assistant
 
-Awesome features: symmetry mode, rainbow mode, and disappearing mode
+Awesome features: symmetry, rainbow, and disappearing mode
 */
 
 // Vertex shader program
