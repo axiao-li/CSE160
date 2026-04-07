@@ -269,6 +269,8 @@ function drawPicture() {
             gl.uniform4f(u_FragColor, ...this.color);
             drawTriangle(v);
         };
+        t.createdAt = performance.now();
+        t.lifetime = Infinity;
         g_shapesList.push(t);
     }
 
