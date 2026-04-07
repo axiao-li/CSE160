@@ -250,10 +250,25 @@ function renderAllShapes() {
         return now - shape.createdAt < shape.lifetime;
     });
 
+    var len = g_shapesList.length;
+
     for (let shape of g_shapesList) {
         shape.render();
     }
+
+    var duration = performance.now() - now;
+    sendTextToHTML("numdot: " + len + " ms: " + Math.floor(duration) + " fps: " + Math.floor(10000/duration)/10, "numdot");
+
     
+}
+
+function sendTextToHTML(text, htmlID){
+    var htmlElm = document.getElementById(htmlID);
+    if(!htmlElm){
+        console.log("Failed to get" + htmlID + " from HTML");
+        return;
+    }
+    htmlElm.innerHTML = text;
 }
 
 function drawPicture() {
