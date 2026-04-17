@@ -1,3 +1,8 @@
+/*
+Name: Alice Xiao-Li
+Email: axiaoli@ucsc.edu
+Note: Used LLM as a coding assistant
+*/
 class Otter {
     constructor() {
         this.matrix = new Matrix4();

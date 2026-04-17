@@ -1,6 +1,7 @@
 /*
 Name: Alice Xiao-Li
 Email: axiaoli@ucsc.edu
+Note: Used LLM as a coding assistant
 */
 
 class Cone {
