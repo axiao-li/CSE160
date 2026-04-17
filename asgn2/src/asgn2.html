@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Assignment 2</title>
+  </head>
+
+  <body onload="main()">
+    <canvas id="webgl" width="600" height="600">
+    Please use a browser that supports "canvas"
+    </canvas>
+    <li id="numdot">ms: 0</li>
+    
+    <p>
+    <li><b>Rotation Controls:</b></li>
+    x-axis: <input type="range" min="0" max="360" value="0" class="slider" id="angleXSlide">
+    y-axis: <input type="range" min="0" max="360" value="0" class="slider" id="angleYSlide">
+    z-axis: <input type="range" min="0" max="360" value="0" class="slider" id="angleZSlide">
+    <br><i>(Click and drag your mouse on the canvas to rotate as well)</i></li>
+    <p>
+    <li><b>Joint Controls:</b></li>
+    Head: <input type="range" min="-20" max="20" value="0" class="slider" id="headSlide">
+    Neck: <input type="range" min="-20" max="15" value="0" class="slider" id="neckSlide">
+    <br>
+    Upper Tail: <input type="range" min="-20" max="20" value="0" class="slider" id="tail1Slide">
+    Lower Tail: <input type="range" min="-20" max="20" value="0" class="slider" id="tail2Slide">
+    <br>
+    (Left Foreleg)
+    Upper Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg1Slide">
+    Middle Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg2Slide">
+    Lower Leg: <input type="range" min="-75" max="35" value="0" class="slider" id="leg3Slide">
+    <br>
+    (Right Foreleg)
+    Upper Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg4Slide">
+    Middle Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg5Slide">
+    Lower Leg: <input type="range" min="-75" max="35" value="0" class="slider" id="leg6Slide">
+    <br>
+    (Left Hindleg)
+    Upper Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg7Slide">
+    Middle Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg8Slide">
+    Lower Leg: <input type="range" min="-75" max="35" value="0" class="slider" id="leg9Slide">
+    <br>
+    (Right Hindleg)
+    Upper Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg10Slide">
+    Middle Leg: <input type="range" min="-45" max="45" value="0" class="slider" id="leg11Slide">
+    Lower Leg: <input type="range" min="-75" max="35" value="0" class="slider" id="leg12Slide">
+    <p>
+    <li><b>Automatic Animation: </b>Swim!</li>
+    <button type="button" id="onButton">On</button>
+    <button type="button" id="offButton">Off</button>
+    <p>
+    <li><b>Poke Animation: </b>Snack time!
+      <br><i>(Hold Shift and Left Click on the canvas to toggle on/off)</i></li>
+    
+
+
+    <script src="../lib/webgl-utils.js"></script>
+    <script src="../lib/webgl-debug.js"></script>
+    <script src="../lib/cuon-utils.js"></script>
+    <script src="../lib/cuon-matrix-cse160.js"></script>
+    <script src="Point.js"></script>
+    <script src="Triangle.js"></script>
+    <script src="Circle.js"></script>
+    <script src="Cube.js"></script>
+    <script src="Cone.js"></script>
+    <script src="Otter.js"></script>
+    <script src="asgn2.js"></script>
+  </body>
+</html>

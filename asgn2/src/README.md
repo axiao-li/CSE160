@@ -1,0 +1,1 @@
+Sources: The CSE160 Helper YouTube Videos and a minecraft otter model I found and used as a reference for the design.
