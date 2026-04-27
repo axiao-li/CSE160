@@ -1731,8 +1731,8 @@ function updateMovement(deltaTime) {
     }
 
     let verticalInput = 0;
-    if (g_keys['z']) verticalInput += 1;
-    if (g_keys['x']) verticalInput -= 1;
+    // if (g_keys['z']) verticalInput += 1;
+    // if (g_keys['x']) verticalInput -= 1;
     if (verticalInput !== 0) {
         g_camera.eye.elements[1] += verticalInput * VERTICAL_SPEED_PER_SEC * dt;
         keepCameraAboveGround();
