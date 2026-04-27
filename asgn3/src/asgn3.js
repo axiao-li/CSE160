@@ -1,3 +1,8 @@
+/*
+Name: Alice Xiao-Li
+Email: axiaoli@ucsc.edu
+Note: Used LLM as a coding assistant
+*/
 
 // Vertex shader program
 var VSHADER_SOURCE = `
@@ -243,6 +248,15 @@ let g_spawnCellZ = 0;
 let g_textureSlots = {};
 let g_texturePOTCanvas = {};
 let g_animatedTextureHost = null;
+let g_audioInitialized = false;
+let g_backgroundMusicAudio = null;
+let g_collectFlowerAudio = null;
+let g_hoorayAudio = null;
+let g_oofAudio = null;
+let g_gnomeHurtAudio = null;
+let g_blockAudio = null;
+let g_wompAudio = null;
+let g_gnomeLaughAudioLoops = [];
 
 const BLOCK_SIZE = 0.4;
 const FLOOR_Y = -0.75;
@@ -280,6 +294,16 @@ const GNOME_MAX_COUNT = 10;
 const SAFE_ZONE_HALF_CELLS = 1;
 const SAFE_ZONE_HEIGHT_BLOCKS = 3;
 const GAME_UI_FONT = '"Press Start 2P", "VT323", "Lucida Console", "Courier New", monospace';
+const BACKGROUND_MUSIC_VOLUME = 0.3;
+const FLOWER_COLLECT_VOLUME = 0.85;
+const HOORAY_VOLUME = 0.9;
+const OOF_VOLUME = 0.8;
+const GNOME_HURT_VOLUME = 0.85;
+const BLOCK_VOLUME = 0.75;
+const WOMP_VOLUME = 0.85;
+const GNOME_LAUGH_MAX_VOLUME = 0.56;
+const GNOME_LAUGH_NEAR_DIST = BLOCK_SIZE * 1.0;
+const GNOME_LAUGH_FAR_DIST = BLOCK_SIZE * 18.0;
 
 function buildGlobalRotateMatrix() {
     return new Matrix4()
@@ -290,6 +314,112 @@ function buildGlobalRotateMatrix() {
 
 function clamp(value, minValue, maxValue) {
     return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function createAudioClip(src, loop = false, volume = 1.0) {
+    let clip = new Audio(src);
+    clip.preload = 'auto';
+    clip.loop = loop;
+    clip.volume = clamp(volume, 0, 1);
+    return clip;
+}
+
+function initAudio() {
+    if (g_audioInitialized) return;
+    g_backgroundMusicAudio = createAudioClip('../resources/backgroundMusic.mp3', true, BACKGROUND_MUSIC_VOLUME);
+    g_collectFlowerAudio = createAudioClip('../resources/collectFlower.mp3', false, FLOWER_COLLECT_VOLUME);
+    g_hoorayAudio = createAudioClip('../resources/hooray.mp3', false, HOORAY_VOLUME);
+    g_oofAudio = createAudioClip('../resources/oof.mp3', false, OOF_VOLUME);
+    g_gnomeHurtAudio = createAudioClip('../resources/gnomeHurt.mp3', false, GNOME_HURT_VOLUME);
+    g_blockAudio = createAudioClip('../resources/block.mp3', false, BLOCK_VOLUME);
+    g_wompAudio = createAudioClip('../resources/womp.mp3', false, WOMP_VOLUME);
+    g_audioInitialized = true;
+    ensureGnomeLaughAudioLoopCount();
+}
+
+function playLoopAudio(loopAudio) {
+    if (!loopAudio) return;
+    if (!loopAudio.paused) return;
+    let playPromise = loopAudio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(function() {});
+    }
+}
+
+function stopLoopAudio(loopAudio) {
+    if (!loopAudio) return;
+    loopAudio.pause();
+    try {
+        loopAudio.currentTime = 0;
+    } catch (err) {
+        // Ignore currentTime errors from browsers that block seek pre-play.
+    }
+}
+
+function playOneShotAudio(sourceAudio, volumeScale = 1.0) {
+    if (!sourceAudio) return;
+    let shot = sourceAudio.cloneNode(true);
+    shot.loop = false;
+    shot.volume = clamp(sourceAudio.volume * volumeScale, 0, 1);
+    let playPromise = shot.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(function() {});
+    }
+}
+
+function ensureGnomeLaughAudioLoopCount() {
+    if (!g_audioInitialized) return;
+    while (g_gnomeLaughAudioLoops.length < g_gnomes.length) {
+        let clip = createAudioClip('../resources/gnomeLaugh.mp3', true, 0);
+        g_gnomeLaughAudioLoops.push(clip);
+    }
+    while (g_gnomeLaughAudioLoops.length > g_gnomes.length) {
+        let oldClip = g_gnomeLaughAudioLoops.pop();
+        stopLoopAudio(oldClip);
+    }
+}
+
+function computeDistanceFade(distance, nearDist, farDist) {
+    if (distance <= nearDist) return 1;
+    if (distance >= farDist) return 0;
+    let t = (distance - nearDist) / Math.max(1e-6, farDist - nearDist);
+    return 1 - t;
+}
+
+function updateGnomeLaughVolumes() {
+    if (!g_audioInitialized || !g_camera) return;
+    ensureGnomeLaughAudioLoopCount();
+
+    let px = g_camera.eye.elements[0];
+    let pz = g_camera.eye.elements[2];
+    for (let i = 0; i < g_gnomeLaughAudioLoops.length; i++) {
+        let gain = 0;
+        if (i < g_gnomes.length) {
+            let dx = px - g_gnomes[i].x;
+            let dz = pz - g_gnomes[i].z;
+            let distance = Math.hypot(dx, dz);
+            gain = computeDistanceFade(distance, GNOME_LAUGH_NEAR_DIST, GNOME_LAUGH_FAR_DIST);
+        }
+        g_gnomeLaughAudioLoops[i].volume = clamp(GNOME_LAUGH_MAX_VOLUME * gain, 0, 1);
+    }
+}
+
+function startLoopingGameAudio() {
+    initAudio();
+    playLoopAudio(g_backgroundMusicAudio);
+    ensureGnomeLaughAudioLoopCount();
+    for (let i = 0; i < g_gnomeLaughAudioLoops.length; i++) {
+        playLoopAudio(g_gnomeLaughAudioLoops[i]);
+    }
+    updateGnomeLaughVolumes();
+}
+
+function stopLoopingGameAudio() {
+    if (!g_audioInitialized) return;
+    stopLoopAudio(g_backgroundMusicAudio);
+    for (let i = 0; i < g_gnomeLaughAudioLoops.length; i++) {
+        stopLoopAudio(g_gnomeLaughAudioLoops[i]);
+    }
 }
 
 function syncCameraAnglesFromView() {
@@ -614,6 +744,7 @@ function handleCanvasClick(clientX, clientY) {
         collectFlowerAtIndex(bestIndex);
     } else if (bestType === 'gnome') {
         g_gnomesAttackedCount += 1;
+        playOneShotAudio(g_gnomeHurtAudio);
         respawnGnomeAtIndex(bestGnomeIndex);
     }
 }
@@ -868,6 +999,8 @@ function main() {
     g_blocksPlacedCount = 0;
 
     setupFlowerCounterUI();
+    setupCompassUI();
+    setupGiveUpButtonUI();
     setupTimerUI();
     setupNoticeUI();
     setupGameCompleteUI();
@@ -875,7 +1008,9 @@ function main() {
     setupHelpOverlayUI();
     initMap();
     initTextures();
+    initAudio();
     updateFlowerCounterUI();
+    updateCompassUI();
     updateStartScreenGnomeCountUI();
     updateTimerUI();
 
@@ -903,12 +1038,16 @@ function tick() {
         updateMovement(deltaTime);
         updateGnomes(deltaTime);
         checkGnomeCatches();
+        updateGnomeLaughVolumes();
         g_elapsedTimeSeconds = (now - g_gameStartTime) + g_timePenaltySeconds;
     }
 
     updateTimerUI();
+    updateCompassUI();
     refreshAnimatedTextures();
     positionFlowerCounterUI();
+    positionCompassUI();
+    positionGiveUpButtonUI();
     positionTimerUI();
     positionNoticeUI();
     positionGameCompleteUI();
@@ -956,7 +1095,150 @@ function positionFlowerCounterUI() {
 function updateFlowerCounterUI() {
     let counter = document.getElementById('flowerCounter');
     if (!counter) return;
-    counter.textContent = g_collectedFlowers + '/' + FLOWER_TARGET + ' flowers collected';
+    counter.textContent = '🪻' + g_collectedFlowers + '/' + FLOWER_TARGET + ' flowers collected';
+    counter.style.color = '#ffa9e2';
+}
+
+function setupCompassUI() {
+    let compass = document.getElementById('compassReadout');
+    if (!compass) {
+        compass = document.createElement('div');
+        compass.id = 'compassReadout';
+        compass.style.position = 'fixed';
+        compass.style.transform = 'translateX(-100%)';
+        compass.style.zIndex = '20';
+        compass.style.padding = '7px 10px';
+        compass.style.borderRadius = '6px';
+        compass.style.background = 'rgba(0,0,0,0.5)';
+        compass.style.color = '#d8f3ff';
+        compass.style.fontFamily = GAME_UI_FONT;
+        compass.style.fontSize = '12px';
+        compass.style.lineHeight = '1.35';
+        compass.style.whiteSpace = 'nowrap';
+        compass.style.pointerEvents = 'none';
+        document.body.appendChild(compass);
+        window.addEventListener('resize', positionCompassUI);
+        window.addEventListener('scroll', positionCompassUI, true);
+    }
+    positionCompassUI();
+}
+
+function positionCompassUI() {
+    let compass = document.getElementById('compassReadout');
+    let counter = document.getElementById('flowerCounter');
+    if (!compass || !counter || !canvas) return;
+    let rect = canvas.getBoundingClientRect();
+    let counterRect = counter.getBoundingClientRect();
+    compass.style.left = Math.max(0, rect.right - 12) + 'px';
+    compass.style.top = Math.max(0, rect.top + 12 + counterRect.height + 8) + 'px';
+}
+
+function findNearestCompassTarget(targets) {
+    if (!g_camera || !targets || targets.length === 0) return null;
+
+    let playerCell = worldToMapCell(g_camera.eye.elements[0], g_camera.eye.elements[2]);
+    let best = null;
+    let bestDistSq = Infinity;
+
+    for (let i = 0; i < targets.length; i++) {
+        let tx = targets[i][0];
+        let tz = targets[i][1];
+        let dx = tx - playerCell[0];
+        let dz = tz - playerCell[1];
+        let distSq = dx * dx + dz * dz;
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            best = { dx: dx, dy: -dz };
+        }
+    }
+    return best;
+}
+
+function getNearestFlowerOffset() {
+    let flowerTargets = [];
+    for (let i = 0; i < g_flowers.length; i++) {
+        let flower = g_flowers[i];
+        if (flower.collected) continue;
+        flowerTargets.push([flower.x, flower.z]);
+    }
+    return findNearestCompassTarget(flowerTargets);
+}
+
+function getNearestGnomeOffset() {
+    let gnomeTargets = [];
+    for (let i = 0; i < g_gnomes.length; i++) {
+        let gnomeCell = worldToMapCell(g_gnomes[i].x, g_gnomes[i].z);
+        gnomeTargets.push([gnomeCell[0], gnomeCell[1]]);
+    }
+    return findNearestCompassTarget(gnomeTargets);
+}
+
+function updateCompassUI() {
+    let compass = document.getElementById('compassReadout');
+    if (!compass) return;
+
+    let flowerOffset = getNearestFlowerOffset();
+    let gnomeOffset = getNearestGnomeOffset();
+    let flowerText = flowerOffset
+        ? ('Nearest flower: x = ' + flowerOffset.dx + ', y = ' + flowerOffset.dy)
+        : 'Nearest flower: x = --, y = --';
+    let gnomeText = gnomeOffset
+        ? ('Nearest gnome: x = ' + gnomeOffset.dx + ', y = ' + gnomeOffset.dy)
+        : 'Nearest gnome: x = --, y = --';
+
+    compass.innerHTML = flowerText + '<br>' + gnomeText;
+}
+
+function setupGiveUpButtonUI() {
+    let button = document.getElementById('giveUpButton');
+    if (!button) {
+        button = document.createElement('button');
+        button.id = 'giveUpButton';
+        button.textContent = 'Give up?';
+        button.style.position = 'fixed';
+        button.style.transform = 'translateX(-100%)';
+        button.style.zIndex = '21';
+        button.style.padding = '6px 10px';
+        button.style.borderRadius = '6px';
+        button.style.border = '1px solid rgba(255,255,255,0.35)';
+        button.style.background = 'rgba(0,0,0,0.6)';
+        button.style.color = '#ffe6e6';
+        button.style.fontFamily = GAME_UI_FONT;
+        button.style.fontSize = '12px';
+        button.style.cursor = 'pointer';
+        button.style.display = 'none';
+        button.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            giveUpCurrentRun();
+        });
+        document.body.appendChild(button);
+        window.addEventListener('resize', positionGiveUpButtonUI);
+        window.addEventListener('scroll', positionGiveUpButtonUI, true);
+    }
+    positionGiveUpButtonUI();
+}
+
+function positionGiveUpButtonUI() {
+    let button = document.getElementById('giveUpButton');
+    let counter = document.getElementById('flowerCounter');
+    let compass = document.getElementById('compassReadout');
+    if (!button || !counter || !canvas) return;
+
+    if (!g_gameActive) {
+        button.style.display = 'none';
+        return;
+    }
+
+    let rect = canvas.getBoundingClientRect();
+    let counterRect = counter.getBoundingClientRect();
+    let compassHeight = 0;
+    if (compass) {
+        let compassRect = compass.getBoundingClientRect();
+        compassHeight = compassRect.height + 8;
+    }
+    button.style.display = 'block';
+    button.style.left = Math.max(0, rect.right - 12) + 'px';
+    button.style.top = Math.max(0, rect.top + 12 + counterRect.height + 8 + compassHeight) + 'px';
 }
 
 function setupTimerUI() {
@@ -1001,7 +1283,7 @@ function formatSeconds(totalSeconds) {
 function updateTimerUI() {
     let timer = document.getElementById('gameTimer');
     if (!timer) return;
-    timer.textContent = 'Time: ' + formatSeconds(g_elapsedTimeSeconds);
+    timer.textContent = '⏰Time: ' + formatSeconds(g_elapsedTimeSeconds);
 }
 
 function setupNoticeUI() {
@@ -1036,7 +1318,7 @@ function positionNoticeUI() {
     notice.style.top = Math.max(0, rect.top + 70) + 'px';
 }
 
-function showNotice(message, durationMs = 4200) {
+function showNotice(message, durationMs = 7000) {
     let notice = document.getElementById('gameNotice');
     if (!notice) return;
     notice.textContent = message;
@@ -1067,9 +1349,9 @@ function setupGameCompleteUI() {
         panel.style.fontSize = '20px';
         panel.style.lineHeight = '1.35';
         panel.style.textAlign = 'center';
-        panel.style.pointerEvents = 'none';
+        panel.style.pointerEvents = 'auto';
         panel.style.display = 'none';
-        panel.textContent = 'You have collected all eight flowers! Good job!';
+        panel.textContent = 'You have collected all eight flowers! Good job!😸';
         document.body.appendChild(panel);
         window.addEventListener('resize', positionGameCompleteUI);
         window.addEventListener('scroll', positionGameCompleteUI, true);
@@ -1086,24 +1368,40 @@ function positionGameCompleteUI() {
     panel.style.transform = 'translate(-50%, -50%)';
 }
 
+function showGameCompletePanel(titleText) {
+    let panel = document.getElementById('gameCompleteOverlay');
+    if (!panel) return;
+
+    panel.innerHTML =
+        titleText +
+        '<div style="margin-top:10px; font-size:15px; line-height:1.5; text-align:left;">' +
+        'Flowers collected: ' + g_collectedFlowers + '<br>' +
+        'Garden gnome chasers: ' + g_gnomeCount + '<br>' +
+        'Time: ' + formatSeconds(g_elapsedTimeSeconds) + '<br>' +
+        'Capture count: ' + g_captureCount + '<br>' +
+        'Gnomes attacked: ' + g_gnomesAttackedCount + '<br>' +
+        'Blocks placed: ' + g_blocksPlacedCount +
+        '</div>' +
+        '<button id="playAgainButton" style="margin-top:14px; padding:8px 12px; font-family:' + GAME_UI_FONT + '; cursor:pointer;">Play again?</button>';
+    panel.style.display = 'block';
+    positionGameCompleteUI();
+
+    let playAgainButton = document.getElementById('playAgainButton');
+    if (playAgainButton) {
+        playAgainButton.onclick = function(ev) {
+            ev.preventDefault();
+            returnToStartScreen();
+        };
+    }
+}
+
 function finishGameIfComplete() {
     if (!g_gameActive) return;
     if (g_collectedFlowers < FLOWER_TARGET) return;
     g_gameActive = false;
-    let panel = document.getElementById('gameCompleteOverlay');
-    if (panel) {
-        panel.innerHTML =
-            'You have collected all eight flowers! Good job!' +
-            '<div style="margin-top:10px; font-size:15px; line-height:1.5; text-align:left;">' +
-            'Garden gnome chasers: ' + g_gnomeCount + '<br>' +
-            'Time: ' + formatSeconds(g_elapsedTimeSeconds) + '<br>' +
-            'Capture count: ' + g_captureCount + '<br>' +
-            'Gnomes attacked: ' + g_gnomesAttackedCount + '<br>' +
-            'Blocks placed: ' + g_blocksPlacedCount +
-            '</div>';
-        panel.style.display = 'block';
-        positionGameCompleteUI();
-    }
+    stopLoopingGameAudio();
+    playOneShotAudio(g_hoorayAudio);
+    showGameCompletePanel('You have collected all eight flowers! Good job!😸');
 }
 
 function setupStartScreenUI() {
@@ -1127,8 +1425,15 @@ function setupStartScreenUI() {
         let title = document.createElement('div');
         title.textContent = 'Gnome Way Out?';
         title.style.fontSize = '20px';
-        title.style.marginBottom = '12px';
         overlay.appendChild(title);
+
+        let subtitle = document.createElement('div');
+        subtitle.textContent = 'Turn on your volume!';
+        subtitle.style.color = '#ffa527';
+        subtitle.style.fontSize = '12px';
+        subtitle.style.opacity = '0.8';
+        subtitle.style.marginBottom = '10px';
+        overlay.appendChild(subtitle);
 
         let row = document.createElement('div');
         row.style.display = 'flex';
@@ -1243,20 +1548,21 @@ function setupHelpOverlayUI() {
         help.style.display = 'none';
 
         let title = document.createElement('div');
-        title.textContent = 'Rules';
+        title.textContent = '📋Rules';
         title.style.fontSize = '18px';
         title.style.marginBottom = '8px';
         help.appendChild(title);
 
         let body = document.createElement('div');
         body.textContent = 'Collect all eight flowers to win! But beware of the garden gnomes who will steal your flowers... '
-                         + 'Click on the flowers to collect them, add/remove stone blocks with F/G, '
-                         + 'use WASD to move, and Q/E to rotate your camera. '
-                         + 'When encountering a garden gnome, click on them to attack or suffocate them with stone blocks. '
-                         + 'If a garden gnome successfully attacks you, you will respawn at a random location in the maze and lose a flower. '
+                         + 'Click flowers to collect them. Use WASD to move, Q/E to rotate the camera, and F/G to add or remove stone blocks. '
+                         + 'While stone blocks may be useful for defending, they disappear each time you collect a flower. '
+                         + 'When encountering a garden gnome, click on them to attack. '
+                         + 'If a garden gnome successfully attacks you, you will respawn somewhere else in the maze and lose one flower. '
                          + 'If you have no flowers when a garden gnome attacks you, your time will increase by ten seconds. '
-                         + 'Garden gnomes always respawn, so don\'t let your guard down! '
-                         + 'If you need a break, retreat to the safe zone at spawn or create a stone barrier around yourself. Good luck!';
+                         + 'Garden gnomes always respawn—but don\'t worry, you\'ll always hear them when they are nearby. '
+                         + 'If you need a break, retreat to the safe zone at spawn or create a stone barrier around yourself. Good luck! '
+                         + '(Fun fact: the maze is randomized each play, so you\'ll never know what you\'ll get!)';
         body.style.marginBottom = '10px';
         help.appendChild(body);
 
@@ -1297,10 +1603,36 @@ function hideHelpOverlay() {
     help.style.display = 'none';
 }
 
-function startGame() {
-    if (g_gameStarted) return;
-    g_gameStarted = true;
+function returnToStartScreen() {
+    g_gameActive = false;
+    g_gameStarted = false;
+    stopLoopingGameAudio();
+    hideHelpOverlay();
+
+    let panel = document.getElementById('gameCompleteOverlay');
+    if (panel) panel.style.display = 'none';
+
+    g_collectedFlowers = 0;
+    g_elapsedTimeSeconds = 0;
+    g_timePenaltySeconds = 0;
+    g_captureCount = 0;
+    g_gnomesAttackedCount = 0;
+    g_blocksPlacedCount = 0;
+    generateFlowers(FLOWER_TARGET);
+    updateFlowerCounterUI();
+    updateTimerUI();
+
+    clearPlayerBlocks();
+    g_gnomes = [];
+    setGnomeCount(g_gnomeCount);
+    respawnPlayerAtSpawn();
+    positionStartScreenUI();
+    positionGiveUpButtonUI();
+}
+
+function restartGame() {
     g_gameActive = true;
+    g_gameStarted = true;
     hideHelpOverlay();
     positionStartScreenUI();
 
@@ -1320,6 +1652,23 @@ function startGame() {
     clearPlayerBlocks();
     g_gnomes = [];
     setGnomeCount(g_gnomeCount);
+    respawnPlayerAtSpawn();
+    startLoopingGameAudio();
+}
+
+function startGame() {
+    if (g_gameActive) return;
+    restartGame();
+}
+
+function giveUpCurrentRun() {
+    if (!g_gameActive) return;
+    let now = performance.now() / 1000.0;
+    g_elapsedTimeSeconds = (now - g_gameStartTime) + g_timePenaltySeconds;
+    g_gameActive = false;
+    stopLoopingGameAudio();
+    playOneShotAudio(g_wompAudio);
+    showGameCompletePanel('You gave up this round.😿');
 }
 
 function tryMoveCamera(moveX, moveZ) {
@@ -1382,8 +1731,8 @@ function updateMovement(deltaTime) {
     }
 
     let verticalInput = 0;
-    // if (g_keys['z']) verticalInput += 1;
-    // if (g_keys['x']) verticalInput -= 1;
+    if (g_keys['z']) verticalInput += 1;
+    if (g_keys['x']) verticalInput -= 1;
     if (verticalInput !== 0) {
         g_camera.eye.elements[1] += verticalInput * VERTICAL_SPEED_PER_SEC * dt;
         keepCameraAboveGround();
@@ -1693,6 +2042,7 @@ function collectFlowerAtIndex(index) {
     flower.collected = true;
     g_collectedFlowers += 1;
     updateFlowerCounterUI();
+    playOneShotAudio(g_collectFlowerAudio);
 
     // Player-placed stone blocks disappear after each flower collection.
     clearPlayerBlocks();
@@ -1765,6 +2115,14 @@ function respawnPlayerRandomly(avoidCell = null) {
     updateCameraDirectionFromAngles();
 }
 
+function respawnPlayerAtSpawn() {
+    let pos = getCellCenterWorld(g_spawnCellX, g_spawnCellZ);
+    g_camera.eye.elements[0] = pos.x;
+    g_camera.eye.elements[1] = FLOOR_Y + PLAYER_EYE_HEIGHT;
+    g_camera.eye.elements[2] = pos.z;
+    updateCameraDirectionFromAngles();
+}
+
 function createGnomeAtRandom() {
     let playerCell = worldToMapCell(g_camera.eye.elements[0], g_camera.eye.elements[2]);
     let cell =
@@ -1799,6 +2157,18 @@ function setGnomeCount(count) {
 
     if (g_gnomes.length < g_gnomeCount) {
         g_gnomeCount = g_gnomes.length;
+    }
+
+    ensureGnomeLaughAudioLoopCount();
+    if (g_gameActive) {
+        for (let i = 0; i < g_gnomeLaughAudioLoops.length; i++) {
+            playLoopAudio(g_gnomeLaughAudioLoops[i]);
+        }
+        updateGnomeLaughVolumes();
+    } else {
+        for (let i = 0; i < g_gnomeLaughAudioLoops.length; i++) {
+            stopLoopAudio(g_gnomeLaughAudioLoops[i]);
+        }
     }
 
     updateStartScreenGnomeCountUI();
@@ -1950,6 +2320,7 @@ function checkGnomeCatches() {
         if (dx * dx + dz * dz > GNOME_CATCH_RADIUS * GNOME_CATCH_RADIUS) continue;
 
         g_captureCount += 1;
+        playOneShotAudio(g_oofAudio);
         if (g_collectedFlowers > 0) {
             loseOneCollectedFlower();
             showNotice('The garden gnome has caught you! You have respawned and lost a flower.');
@@ -2359,6 +2730,7 @@ function addBlock() {
         if (g_map[z][x] > 0) return;
         g_playerBlocks[z][x] += 1;
         g_blocksPlacedCount += 1;
+        playOneShotAudio(g_blockAudio);
         initMap();
     }
 }
@@ -2372,6 +2744,7 @@ function removeBlock() {
         // Only stone blocks are removable.
         if (g_playerBlocks[z][x] > 0) {
             g_playerBlocks[z][x] -= 1;
+            playOneShotAudio(g_blockAudio);
             initMap();
         }
     }
