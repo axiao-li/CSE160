@@ -257,6 +257,10 @@ let g_gnomeHurtAudio = null;
 let g_blockAudio = null;
 let g_wompAudio = null;
 let g_gnomeLaughAudioLoops = [];
+let g_masterVolume = 1.0;
+let g_activeOneShots = [];
+let g_miniMapWallImage = null;
+let g_miniMapStoneImage = null;
 
 const BLOCK_SIZE = 0.4;
 const FLOOR_Y = -0.75;
@@ -304,6 +308,11 @@ const WOMP_VOLUME = 0.85;
 const GNOME_LAUGH_MAX_VOLUME = 0.56;
 const GNOME_LAUGH_NEAR_DIST = BLOCK_SIZE * 1.0;
 const GNOME_LAUGH_FAR_DIST = BLOCK_SIZE * 18.0;
+const MINIMAP_SIZE_PX = 250;
+const MINIMAP_CELL_PADDING_PX = 4;
+const MINIMAP_MARKER_FLOWER_RATIO = 1.15;
+const MINIMAP_MARKER_GNOME_RATIO = 1.25;
+const MINIMAP_MARKER_PLAYER_RATIO = 1.35;
 
 function buildGlobalRotateMatrix() {
     return new Matrix4()
@@ -316,11 +325,16 @@ function clamp(value, minValue, maxValue) {
     return Math.max(minValue, Math.min(maxValue, value));
 }
 
+function applyMasterVolume(rawVolume) {
+    return clamp(rawVolume * g_masterVolume, 0, 1);
+}
+
 function createAudioClip(src, loop = false, volume = 1.0) {
     let clip = new Audio(src);
     clip.preload = 'auto';
     clip.loop = loop;
-    clip.volume = clamp(volume, 0, 1);
+    clip._baseVolume = clamp(volume, 0, 1);
+    clip.volume = applyMasterVolume(clip._baseVolume);
     return clip;
 }
 
@@ -356,21 +370,79 @@ function stopLoopAudio(loopAudio) {
     }
 }
 
+function updateMasterVolumeForActiveAudio() {
+    if (!g_audioInitialized) return;
+
+    let sourceClips = [
+        g_backgroundMusicAudio,
+        g_collectFlowerAudio,
+        g_hoorayAudio,
+        g_oofAudio,
+        g_gnomeHurtAudio,
+        g_blockAudio,
+        g_wompAudio
+    ];
+
+    for (let i = 0; i < sourceClips.length; i++) {
+        let clip = sourceClips[i];
+        if (!clip || typeof clip._baseVolume !== 'number') continue;
+        clip.volume = applyMasterVolume(clip._baseVolume);
+    }
+
+    for (let i = g_activeOneShots.length - 1; i >= 0; i--) {
+        let shot = g_activeOneShots[i];
+        if (!shot || shot.ended) {
+            g_activeOneShots.splice(i, 1);
+            continue;
+        }
+        if (typeof shot._baseVolume === 'number') {
+            shot.volume = applyMasterVolume(shot._baseVolume);
+        }
+    }
+
+    updateGnomeLaughVolumes();
+}
+
+function setMasterVolume(level) {
+    g_masterVolume = clamp(level, 0, 1);
+    updateMasterVolumeForActiveAudio();
+
+    let slider = document.getElementById('masterVolumeSlider');
+    if (slider) slider.value = String(Math.round(g_masterVolume * 100));
+    let readout = document.getElementById('masterVolumeReadout');
+    if (readout) readout.textContent = Math.round(g_masterVolume * 100) + '%';
+}
+
 function playOneShotAudio(sourceAudio, volumeScale = 1.0) {
     if (!sourceAudio) return;
     let shot = sourceAudio.cloneNode(true);
     shot.loop = false;
-    shot.volume = clamp(sourceAudio.volume * volumeScale, 0, 1);
+    let sourceBase = (typeof sourceAudio._baseVolume === 'number')
+        ? sourceAudio._baseVolume
+        : clamp(sourceAudio.volume, 0, 1);
+    shot._baseVolume = clamp(sourceBase * volumeScale, 0, 1);
+    shot.volume = applyMasterVolume(shot._baseVolume);
+
+    let forgetShot = function() {
+        let idx = g_activeOneShots.indexOf(shot);
+        if (idx >= 0) g_activeOneShots.splice(idx, 1);
+    };
+    shot.addEventListener('ended', forgetShot, { once: true });
+    shot.addEventListener('error', forgetShot, { once: true });
+    g_activeOneShots.push(shot);
+
     let playPromise = shot.play();
     if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(function() {});
+        playPromise.catch(function() {
+            forgetShot();
+        });
     }
 }
 
 function ensureGnomeLaughAudioLoopCount() {
     if (!g_audioInitialized) return;
     while (g_gnomeLaughAudioLoops.length < g_gnomes.length) {
-        let clip = createAudioClip('../resources/gnomeLaugh.mp3', true, 0);
+        let clip = createAudioClip('../resources/gnomeLaugh.mp3', true, GNOME_LAUGH_MAX_VOLUME);
         g_gnomeLaughAudioLoops.push(clip);
     }
     while (g_gnomeLaughAudioLoops.length > g_gnomes.length) {
@@ -400,7 +472,7 @@ function updateGnomeLaughVolumes() {
             let distance = Math.hypot(dx, dz);
             gain = computeDistanceFade(distance, GNOME_LAUGH_NEAR_DIST, GNOME_LAUGH_FAR_DIST);
         }
-        g_gnomeLaughAudioLoops[i].volume = clamp(GNOME_LAUGH_MAX_VOLUME * gain, 0, 1);
+        g_gnomeLaughAudioLoops[i].volume = applyMasterVolume(GNOME_LAUGH_MAX_VOLUME * gain);
     }
 }
 
@@ -999,7 +1071,9 @@ function main() {
     g_blocksPlacedCount = 0;
 
     setupFlowerCounterUI();
+    setupVolumeUI();
     setupCompassUI();
+    setupMiniMapUI();
     setupGiveUpButtonUI();
     setupTimerUI();
     setupNoticeUI();
@@ -1011,6 +1085,7 @@ function main() {
     initAudio();
     updateFlowerCounterUI();
     updateCompassUI();
+    updateMiniMapUI();
     updateStartScreenGnomeCountUI();
     updateTimerUI();
 
@@ -1044,9 +1119,12 @@ function tick() {
 
     updateTimerUI();
     updateCompassUI();
+    updateMiniMapUI();
     refreshAnimatedTextures();
     positionFlowerCounterUI();
+    positionVolumeUI();
     positionCompassUI();
+    positionMiniMapUI();
     positionGiveUpButtonUI();
     positionTimerUI();
     positionNoticeUI();
@@ -1097,6 +1175,73 @@ function updateFlowerCounterUI() {
     if (!counter) return;
     counter.textContent = '🪻' + g_collectedFlowers + '/' + FLOWER_TARGET + ' flowers collected';
     counter.style.color = '#ffa9e2';
+}
+
+function setupVolumeUI() {
+    let panel = document.getElementById('volumePanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'volumePanel';
+        panel.style.position = 'fixed';
+        panel.style.zIndex = '22';
+        panel.style.padding = '8px 10px';
+        panel.style.borderRadius = '6px';
+        panel.style.background = 'rgba(0,0,0,0.55)';
+        panel.style.color = '#ffffff';
+        panel.style.fontFamily = GAME_UI_FONT;
+        panel.style.fontSize = '11px';
+        panel.style.lineHeight = '1.2';
+        panel.style.pointerEvents = 'auto';
+        panel.style.userSelect = 'none';
+
+        let label = document.createElement('div');
+        label.textContent = '🔊Volume:';
+        label.style.marginBottom = '6px';
+        panel.appendChild(label);
+
+        let row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+
+        let slider = document.createElement('input');
+        slider.type = 'range';
+        slider.id = 'masterVolumeSlider';
+        slider.min = '0';
+        slider.max = '100';
+        slider.step = '1';
+        slider.value = String(Math.round(g_masterVolume * 100));
+        slider.style.width = '120px';
+        slider.style.cursor = 'pointer';
+        slider.addEventListener('input', function() {
+            let next = Number(slider.value) / 100;
+            setMasterVolume(next);
+        });
+        row.appendChild(slider);
+
+        let readout = document.createElement('span');
+        readout.id = 'masterVolumeReadout';
+        readout.textContent = Math.round(g_masterVolume * 100) + '%';
+        readout.style.minWidth = '34px';
+        readout.style.textAlign = 'right';
+        row.appendChild(readout);
+
+        panel.appendChild(row);
+        document.body.appendChild(panel);
+        window.addEventListener('resize', positionVolumeUI);
+        window.addEventListener('scroll', positionVolumeUI, true);
+    }
+    setMasterVolume(g_masterVolume);
+    positionVolumeUI();
+}
+
+function positionVolumeUI() {
+    let panel = document.getElementById('volumePanel');
+    if (!panel || !canvas) return;
+    let rect = canvas.getBoundingClientRect();
+    let panelRect = panel.getBoundingClientRect();
+    panel.style.left = Math.max(0, rect.left + 12) + 'px';
+    panel.style.top = Math.max(0, rect.bottom - panelRect.height - 12) + 'px';
 }
 
 function setupCompassUI() {
@@ -1189,6 +1334,164 @@ function updateCompassUI() {
     compass.innerHTML = flowerText + '<br>' + gnomeText;
 }
 
+function createMiniMapImage(primarySrc, fallbackSrc = null) {
+    let image = new Image();
+    let didFallback = false;
+    image.onerror = function() {
+        if (!didFallback && fallbackSrc) {
+            didFallback = true;
+            image.src = fallbackSrc;
+        }
+    };
+    image.src = primarySrc;
+    return image;
+}
+
+function ensureMiniMapImages() {
+    if (!g_miniMapWallImage) {
+        g_miniMapWallImage = createMiniMapImage('../resources/wall.jpg', '../resources/brickwall.jpg');
+    }
+    if (!g_miniMapStoneImage) {
+        g_miniMapStoneImage = createMiniMapImage('../resources/stone.jpg', '../resources/brickwall.jpg');
+    }
+}
+
+function setupMiniMapUI() {
+    let miniMap = document.getElementById('miniMapCanvas');
+    if (!miniMap) {
+        miniMap = document.createElement('canvas');
+        miniMap.id = 'miniMapCanvas';
+        miniMap.width = MINIMAP_SIZE_PX;
+        miniMap.height = MINIMAP_SIZE_PX;
+        miniMap.style.position = 'fixed';
+        miniMap.style.transform = 'translateX(-100%)';
+        miniMap.style.zIndex = '20';
+        miniMap.style.borderRadius = '6px';
+        miniMap.style.border = '1px solid rgba(255,255,255,0.25)';
+        miniMap.style.background = 'rgba(0,0,0,0.55)';
+        miniMap.style.pointerEvents = 'none';
+        miniMap.style.imageRendering = 'pixelated';
+        document.body.appendChild(miniMap);
+        window.addEventListener('resize', positionMiniMapUI);
+        window.addEventListener('scroll', positionMiniMapUI, true);
+    }
+    ensureMiniMapImages();
+    positionMiniMapUI();
+}
+
+function positionMiniMapUI() {
+    let miniMap = document.getElementById('miniMapCanvas');
+    let compass = document.getElementById('compassReadout');
+    let counter = document.getElementById('flowerCounter');
+    if (!miniMap || !canvas) return;
+
+    if (!g_gameActive) {
+        miniMap.style.display = 'none';
+        return;
+    }
+
+    let rect = canvas.getBoundingClientRect();
+    let top = rect.top + 12;
+    if (compass) {
+        let compassRect = compass.getBoundingClientRect();
+        top = compassRect.bottom + 8;
+    } else if (counter) {
+        let counterRect = counter.getBoundingClientRect();
+        top = counterRect.bottom + 8;
+    }
+
+    miniMap.style.display = 'block';
+    miniMap.style.left = Math.max(0, rect.right - 12) + 'px';
+    miniMap.style.top = Math.max(0, top) + 'px';
+}
+
+function drawMiniMapTexturedCell(ctx, image, x, y, size, fallbackColor) {
+    if (image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
+        ctx.drawImage(image, x, y, size, size);
+    } else {
+        ctx.fillStyle = fallbackColor;
+        ctx.fillRect(x, y, size, size);
+    }
+}
+
+function drawMiniMapMarkerByCell(ctx, startX, startY, cellSize, x, z, color, sizeRatio) {
+    if (!isCellInBounds(x, z)) return;
+    let diameter = Math.max(6, Math.floor(cellSize * sizeRatio));
+    let centerX = startX + x * cellSize + cellSize * 0.5;
+    let centerY = startY + z * cellSize + cellSize * 0.5;
+    let radius = diameter * 0.5;
+
+    // Use circular markers instead of flat square blocks.
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.stroke();
+}
+
+function updateMiniMapUI() {
+    let miniMap = document.getElementById('miniMapCanvas');
+    if (!miniMap || !g_map || g_map.length === 0 || g_map[0].length === 0) return;
+    let ctx = miniMap.getContext('2d');
+    if (!ctx) return;
+
+    ensureMiniMapImages();
+
+    let width = miniMap.width;
+    let height = miniMap.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, width, height);
+
+    let rows = g_map.length;
+    let cols = g_map[0].length;
+    let cellSize = Math.max(
+        2,
+        Math.floor(
+            Math.min(
+                (width - MINIMAP_CELL_PADDING_PX * 2) / cols,
+                (height - MINIMAP_CELL_PADDING_PX * 2) / rows
+            )
+        )
+    );
+    let drawWidth = cellSize * cols;
+    let drawHeight = cellSize * rows;
+    let startX = Math.floor((width - drawWidth) * 0.5);
+    let startY = Math.floor((height - drawHeight) * 0.5);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(startX, startY, drawWidth, drawHeight);
+
+    for (let z = 0; z < rows; z++) {
+        for (let x = 0; x < cols; x++) {
+            let px = startX + x * cellSize;
+            let py = startY + z * cellSize;
+            if (g_map[z][x] > 0) {
+                drawMiniMapTexturedCell(ctx, g_miniMapWallImage, px, py, cellSize, '#7f6046');
+            } else if (getPlayerBlockHeightAtCell(x, z) > 0) {
+                drawMiniMapTexturedCell(ctx, g_miniMapStoneImage, px, py, cellSize, '#8f98a4');
+            }
+        }
+    }
+
+    for (let i = 0; i < g_flowers.length; i++) {
+        if (g_flowers[i].collected) continue;
+        drawMiniMapMarkerByCell(ctx, startX, startY, cellSize, g_flowers[i].x, g_flowers[i].z, '#b15cff', MINIMAP_MARKER_FLOWER_RATIO);
+    }
+
+    for (let i = 0; i < g_gnomes.length; i++) {
+        let gnomeCell = worldToMapCell(g_gnomes[i].x, g_gnomes[i].z);
+        drawMiniMapMarkerByCell(ctx, startX, startY, cellSize, gnomeCell[0], gnomeCell[1], '#38d46d', MINIMAP_MARKER_GNOME_RATIO);
+    }
+
+    if (g_camera) {
+        let playerCell = worldToMapCell(g_camera.eye.elements[0], g_camera.eye.elements[2]);
+        drawMiniMapMarkerByCell(ctx, startX, startY, cellSize, playerCell[0], playerCell[1], '#ffffff', MINIMAP_MARKER_PLAYER_RATIO);
+    }
+}
+
 function setupGiveUpButtonUI() {
     let button = document.getElementById('giveUpButton');
     if (!button) {
@@ -1222,6 +1525,7 @@ function positionGiveUpButtonUI() {
     let button = document.getElementById('giveUpButton');
     let counter = document.getElementById('flowerCounter');
     let compass = document.getElementById('compassReadout');
+    let miniMap = document.getElementById('miniMapCanvas');
     if (!button || !counter || !canvas) return;
 
     if (!g_gameActive) {
@@ -1236,9 +1540,14 @@ function positionGiveUpButtonUI() {
         let compassRect = compass.getBoundingClientRect();
         compassHeight = compassRect.height + 8;
     }
+    let miniMapHeight = 0;
+    if (miniMap && miniMap.style.display !== 'none') {
+        let miniMapRect = miniMap.getBoundingClientRect();
+        miniMapHeight = miniMapRect.height + 8;
+    }
     button.style.display = 'block';
     button.style.left = Math.max(0, rect.right - 12) + 'px';
-    button.style.top = Math.max(0, rect.top + 12 + counterRect.height + 8 + compassHeight) + 'px';
+    button.style.top = Math.max(0, rect.top + 12 + counterRect.height + 8 + compassHeight + miniMapHeight) + 'px';
 }
 
 function setupTimerUI() {
@@ -1378,8 +1687,8 @@ function showGameCompletePanel(titleText) {
         'Flowers collected: ' + g_collectedFlowers + '<br>' +
         'Garden gnome chasers: ' + g_gnomeCount + '<br>' +
         'Time: ' + formatSeconds(g_elapsedTimeSeconds) + '<br>' +
-        'Capture count: ' + g_captureCount + '<br>' +
-        'Gnomes attacked: ' + g_gnomesAttackedCount + '<br>' +
+        'Attacked count: ' + g_captureCount + '<br>' +
+        'Attack count: ' + g_gnomesAttackedCount + '<br>' +
         'Blocks placed: ' + g_blocksPlacedCount +
         '</div>' +
         '<button id="playAgainButton" style="margin-top:14px; padding:8px 12px; font-family:' + GAME_UI_FONT + '; cursor:pointer;">Play again?</button>';
@@ -1627,6 +1936,7 @@ function returnToStartScreen() {
     setGnomeCount(g_gnomeCount);
     respawnPlayerAtSpawn();
     positionStartScreenUI();
+    positionMiniMapUI();
     positionGiveUpButtonUI();
 }
 
@@ -1653,6 +1963,7 @@ function restartGame() {
     g_gnomes = [];
     setGnomeCount(g_gnomeCount);
     respawnPlayerAtSpawn();
+    positionMiniMapUI();
     startLoopingGameAudio();
 }
 
