@@ -2,6 +2,8 @@
 Name: Alice Xiao-Li
 Email: axiaoli@ucsc.edu
 Note: Used LLM as a coding assistant
+
+Color texture is on the safezone cube (safeZone.textureNum)
 */
 
 // Vertex shader program
@@ -914,11 +916,11 @@ function loadTexture(src, textureUnit, fallbackSrc = null) {
 }
 
 function initTextures() {
-    loadTexture('../resources/sky2.jpg', 0);            // texture 0
-    loadTexture('../resources/grass.jpg', 1);           // texture 1
-    loadTexture('../resources/wall.jpg', 2, '../resources/brickwall.jpg');    // texture 2
-    loadTexture('../resources/stone.jpg', 3, '../resources/brickwall.jpg');   // texture 3
-    loadTexture('../resources/lavender.gif', 4, '../resources/stone.jpg');     // texture 4
+    loadTexture('../resources/sky2.jpg', 0);                                    // texture 0
+    loadTexture('../resources/grass.jpg', 1);                                   // texture 1
+    loadTexture('../resources/wall.jpg', 2, '../resources/brickwall.jpg');      // texture 2
+    loadTexture('../resources/stone.jpg', 3, '../resources/brickwall.jpg');     // texture 3
+    loadTexture('../resources/lavender.gif', 4, '../resources/stone.jpg');      // texture 4
     loadTexture('../resources/gnome.gif', 5, '../resources/lavender.gif');      // texture 5
 
     return true;
@@ -1046,12 +1048,10 @@ function refreshAnimatedTextures() {
 }
 
 function main() {
-
     // Set up canvas and gl variables
     setupWebGL();
     // Set up GLSL shader programs and connect GLSL variables
     connectVariablesToGLSL();
-
     // Set up actions for the HTML UI elements
     addActionsForHtmlUI();
 
@@ -1421,7 +1421,7 @@ function drawMiniMapMarkerByCell(ctx, startX, startY, cellSize, x, z, color, siz
     let centerY = startY + z * cellSize + cellSize * 0.5;
     let radius = diameter * 0.5;
 
-    // Use circular markers instead of flat square blocks.
+    // circular markers
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -2556,16 +2556,16 @@ function updateSingleGnome(gnome, deltaTime) {
         return;
     }
 
-    if (gnome.repathTimer <= 0 || gnome.path.length === 0) {
+    if (gnome.repathTimer <= 0) {
         gnome.path = buildPathBFS(gCell[0], gCell[1], pCell[0], pCell[1]);
         gnome.repathTimer = GNOME_REPATH_SECONDS;
     }
 
-    if (gnome.path.length === 0) return;
+    let hasPath = gnome.path.length > 0;
 
-    let targetX = gnome.x;
-    let targetZ = gnome.z;
-    if (gnome.path.length > 0) {
+    let targetX = g_camera.eye.elements[0];
+    let targetZ = g_camera.eye.elements[2];
+    if (hasPath) {
         let next = gnome.path[0];
         let center = getCellCenterWorld(next[0], next[1]);
         targetX = center.x;
@@ -2580,6 +2580,9 @@ function updateSingleGnome(gnome, deltaTime) {
                 center = getCellCenterWorld(next[0], next[1]);
                 targetX = center.x;
                 targetZ = center.z;
+            } else {
+                // Path consumed; repath immediately so pursuit stays responsive.
+                gnome.repathTimer = 0;
             }
         }
     }
@@ -2593,6 +2596,7 @@ function updateSingleGnome(gnome, deltaTime) {
     let moveX = dx / dist * step;
     let moveZ = dz / dist * step;
     let probeY = FLOOR_Y + PLAYER_EYE_HEIGHT;
+    let moved = false;
 
     let nextX = gnome.x + moveX;
     let nextZ = gnome.z + moveZ;
@@ -2601,12 +2605,43 @@ function updateSingleGnome(gnome, deltaTime) {
     if (!isCellInSafeZone(nextCellX[0], nextCellX[1]) &&
         canOccupyWithRadius(nextX, probeY, gnome.z, GNOME_RADIUS)) {
         gnome.x = nextX;
+        moved = true;
     }
 
     let nextCellZ = worldToMapCell(gnome.x, nextZ);
     if (!isCellInSafeZone(nextCellZ[0], nextCellZ[1]) &&
         canOccupyWithRadius(gnome.x, probeY, nextZ, GNOME_RADIUS)) {
         gnome.z = nextZ;
+        moved = true;
+    }
+
+    if (hasPath && !moved) {
+        // The map changed (e.g. player block placed), so force a fresh path next frame.
+        gnome.repathTimer = 0;
+    }
+
+    // If there's no grid path to the player, keep pursuing by strafing around blockades.
+    if (!hasPath && !moved) {
+        let perpX = -dz / dist;
+        let perpZ = dx / dist;
+        let strafeStep = step * 0.75;
+        let strafeCandidates = [
+            [perpX * strafeStep, perpZ * strafeStep],
+            [-perpX * strafeStep, -perpZ * strafeStep]
+        ];
+
+        for (let i = 0; i < strafeCandidates.length; i++) {
+            let sx = gnome.x + strafeCandidates[i][0];
+            let sz = gnome.z + strafeCandidates[i][1];
+            let scell = worldToMapCell(sx, sz);
+            if (isCellInSafeZone(scell[0], scell[1])) continue;
+            if (canOccupyWithRadius(sx, probeY, sz, GNOME_RADIUS)) {
+                gnome.x = sx;
+                gnome.z = sz;
+                moved = true;
+                break;
+            }
+        }
     }
 }
 
