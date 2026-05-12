@@ -330,6 +330,7 @@ let g_yaw = 0;      // left and right
 let g_pitch = 0;    // up and down
 let g_normalOn = false;
 let g_lightPos = [0, 1, -2];
+let g_lightOffsetX = 0;
 let g_lightOn = true;
 let g_lightColor = [1.0, 1.0, 1.0];
 let g_spotOn = false;
@@ -423,7 +424,7 @@ function tick() {
     g_seconds = performance.now() / 1000.0-g_startTime;
     // console.log(g_seconds);
 
-    g_lightPos[0] = Math.cos(g_seconds);
+    g_lightOffsetX = Math.cos(g_seconds);
 
     // Draw everything
     renderAllShapes();
@@ -664,7 +665,7 @@ function renderAllShapes() {
     gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
     // Lighting uniforms
-    let lightPos = new Vector4([g_lightPos[0], g_lightPos[1], g_lightPos[2], 1.0]);
+    let lightPos = new Vector4([g_lightPos[0] + g_lightOffsetX, g_lightPos[1], g_lightPos[2], 1.0]);
     let transformedLightPos = globalRotMat.multiplyVector4(lightPos);
 
     gl.uniform3f(u_lightPos, transformedLightPos.elements[0], transformedLightPos.elements[1], transformedLightPos.elements[2]);
@@ -762,7 +763,7 @@ function renderAllShapes() {
     light.color = [g_lightColor[0], g_lightColor[1], g_lightColor[2], 1.0];
     light.textureNum = -4;
     light.matrix.translate(0.0, -0.5, 1.5);
-    light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+    light.matrix.translate(g_lightPos[0] + g_lightOffsetX, g_lightPos[1], g_lightPos[2]);
     light.matrix.scale(0.1, 0.1, 0.1);
     light.render();
 
