@@ -1253,8 +1253,12 @@ function setSpikeFogEffectActive(active) {
     if (g_spikeFogEffectActive === active) return;
     g_spikeFogEffectActive = active;
     if (!scene) return;
-    if (active) scene.fog = new THREE.FogExp2(SPIKE_FOG_COLOR, SPIKE_FOG_DENSITY);
-    else scene.fog = new THREE.FogExp2(NORMAL_FOG_COLOR, NORMAL_FOG_DENSITY);
+    if (active) {
+        scene.fog = new THREE.FogExp2(SPIKE_FOG_COLOR, SPIKE_FOG_DENSITY);
+        playOneShotAudio(g_oofAudio);
+    } else {
+        scene.fog = new THREE.FogExp2(NORMAL_FOG_COLOR, NORMAL_FOG_DENSITY);
+    }
 }
 
 function activateSpikeFogEffect() {
